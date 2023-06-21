@@ -45,7 +45,7 @@ static unsigned procfsBufferSize = 0;
 
 
 /**  
- @brief Макросы для убобного лога
+ @brief Макросы для удобного лога
  */
 #define LOG_HELPER(fmt, ...) \
 { \
@@ -57,14 +57,22 @@ static unsigned procfsBufferSize = 0;
 
 
 /**  
- @brief 
- @todo 
+ @brief Функция чтения данных пользователем.
+ 
+ @param [in] pFile Представление открытого файла.
+ @param [in] buffer Массив пользовательских данных.
+ @param [in] bufLen Длина массива пользовательских данных.
+ @param [out] offset Сдвиг для чтения.
+ 
+ @return -EFAULT в случае ошибки, 0 в случае конца чтения, 
+         >0 (размер считанных данных в байтах) в случае частичного чтения.
  */
 static ssize_t procFileRead( struct file *pFile, char __user *buffer,
                              size_t bufLen, loff_t *offset )
 {
     enum { END_OF_READING = 0 };
     
+    // Обработка случая окончания чтения
     if( *offset >= procfsBufferSize || 0 == procfsBufferSize )
     {
         LOG("procFileRead: end of reading");
@@ -76,6 +84,7 @@ static ssize_t procFileRead( struct file *pFile, char __user *buffer,
         bufLen = procfsBufferSize;
     }
     
+    // Передача данных между пространствами пользователя и ядра
     if( copy_to_user( buffer, procfsBuffer, bufLen ) )
     {
         return -EFAULT;
@@ -88,8 +97,15 @@ static ssize_t procFileRead( struct file *pFile, char __user *buffer,
 }
 
 /**  
- @brief 
- @todo 
+ @brief Функция записи данных пользователем.
+ 
+ @param [in] pFile Представление открытого файла.
+ @param [out] buffer Массив для записи данных пользователю.
+ @param [in] len Длина массива  данных.
+ @param [out] offset Сдвиг для записи.
+ 
+ @return -EFAULT в случае ошибки, >0 (размер записанных данных в байтах) 
+         в случае частичной записи.
  */
 static ssize_t procFileWrite( struct file *pFile, const char __user *buff, 
                               size_t len, loff_t *off) 
@@ -104,12 +120,15 @@ static ssize_t procFileWrite( struct file *pFile, const char __user *buff,
         LOG( "procFileWrite: writing %lu bytes...", len );
     }
     
+    // Передача данных между пространствами пользователя и ядра
     if( copy_from_user( procfsBuffer, buff, len ) )
     {
         return -EFAULT;
     }
     
     *off += len;
+    
+    // Обновление размера внутреннего буфера
     procfsBufferSize = len;
     
     LOG( "procFileWrite: writing done!" );
@@ -118,21 +137,32 @@ static ssize_t procFileWrite( struct file *pFile, const char __user *buff,
 }
 
 /**  
- @brief 
- @todo 
+ @brief Функция открытия файла в /proc.
+
+ @param [in] inode Информация о файле/директории.
+ @param [in] file Представление открытого файла.
  */
 static int procfsOpen( struct inode *inode, struct file *file )
 {
+    LOG( "procfsOpen" );
+    
+    // Увеличение числа активных обращений к модулю. 
+    // Нужно для корректной выгрузки
     try_module_get( THIS_MODULE );
     return 0;
 }
 
 /**  
- @brief 
- @todo 
+ @brief Функция закрытия файла в /proc.
+
+ @param [in] inode Информация о файле/директории.
+ @param [in] file Представление открытого файла.
  */
 static int procfsClose( struct inode *inode, struct file *file )
 {
+    LOG( "procfsClose" );
+    
+    // Уменьшение числа активных обращений к модулю. 
     module_put( THIS_MODULE );
     return 0;
 }
@@ -157,8 +187,7 @@ static const struct file_operations procFileOps =
 #endif 
 
 /**  
- @brief 
- @todo 
+ @brief Функция загрузки модуля.
  */
 static int __init procfs2Init( void )
 {
@@ -170,7 +199,11 @@ static int __init procfs2Init( void )
         return -ENOMEM;
     }
     
-    proc_set_size( ourProcFile, 80 );
+    // Установка размера файла /proc/*
+    /// @todo Зачем?
+    proc_set_size( ourProcFile, 8 );
+    
+    // Установка идентификаторов владения файла /proc/*
     proc_set_user( ourProcFile, GLOBAL_ROOT_UID, GLOBAL_ROOT_GID );
     
     LOG( "/proc/%s created", PROCFS_FILE_NAME );
@@ -178,8 +211,7 @@ static int __init procfs2Init( void )
 }
 
 /**  
- @brief 
- @todo 
+ @brief Функция выгрузки модуля.
  */
 static void __exit procfs2Exit( void )
 {
@@ -188,9 +220,11 @@ static void __exit procfs2Exit( void )
 }
 
 
-
 module_init( procfs2Init );
 module_exit( procfs2Exit );
 
 MODULE_LICENSE( "GPL" );
+MODULE_AUTHOR("Alexandr Petrov");
+MODULE_DESCRIPTION("procfs example");
+
 
