@@ -79,14 +79,17 @@ static ssize_t procFileRead( struct file *pFile, char __user *buffer,
         return END_OF_READING;
     }
     
-    if( bufLen > procfsBufferSize )
+    // При сдвиге размер "меньше"
+    const unsigned truncSize = procfsBufferSize - *offset;
+    if( bufLen > truncSize )
     {
-        bufLen = procfsBufferSize;
+        bufLen = truncSize;
     }
     
     // Передача данных между пространствами пользователя и ядра
-    if( copy_to_user( buffer, procfsBuffer, bufLen ) )
+    if( copy_to_user( buffer, procfsBuffer + *offset, bufLen ) )
     {
+        LOG("procFileRead: ERROR copy_to_user ");
         return -EFAULT;
     }
         
@@ -109,10 +112,13 @@ static ssize_t procFileRead( struct file *pFile, char __user *buffer,
  */
 static ssize_t procFileWrite( struct file *pFile, const char __user *buff, 
                               size_t len, loff_t *off) 
-{
-    if( len > MAX_FILE_SIZE  )
+{    
+    // При сдвиге размер "меньше"
+    const unsigned truncSize = MAX_FILE_SIZE - *off;
+
+    if( len > truncSize  )
     {
-        len = MAX_FILE_SIZE;
+        len = truncSize;
         LOG( "procFileWrite: file is truncated to %lu bytes", len );
     }
     else
@@ -121,15 +127,16 @@ static ssize_t procFileWrite( struct file *pFile, const char __user *buff,
     }
     
     // Передача данных между пространствами пользователя и ядра
-    if( copy_from_user( procfsBuffer, buff, len ) )
+    if( copy_from_user( procfsBuffer + *off, buff, len ) )
     {
+        LOG("procFileRead: ERROR copy_from_user ");
         return -EFAULT;
     }
     
     *off += len;
     
     // Обновление размера внутреннего буфера
-    procfsBufferSize = len;
+    procfsBufferSize = *off;
     
     LOG( "procFileWrite: writing done!" );
     
@@ -201,7 +208,7 @@ static int __init procfs2Init( void )
     
     // Установка размера файла /proc/*
     /// @todo Зачем?
-    proc_set_size( ourProcFile, 8 );
+    proc_set_size( ourProcFile, MAX_FILE_SIZE );
     
     // Установка идентификаторов владения файла /proc/*
     proc_set_user( ourProcFile, GLOBAL_ROOT_UID, GLOBAL_ROOT_GID );
